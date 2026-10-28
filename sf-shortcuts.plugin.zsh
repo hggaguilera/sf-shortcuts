@@ -103,6 +103,15 @@ _sf_parse() {
 
 # Prints the command (dimmed), then runs it
 _sf_run() {
+  # No sf installed: run the CLI through npx instead
+  if [[ $1 == sf ]] && (( ! $+commands[sf] && ! $+functions[sf] )); then
+    if (( ! $+commands[npx] )); then
+      print -u2 "sf-shortcuts: Salesforce CLI not found. Install it (brew install sf, or npm install -g @salesforce/cli) or install Node so npx can run it"
+      return 127
+    fi
+    shift
+    set -- npx -y @salesforce/cli "$@"
+  fi
   print -r -- $'\e[2m'"→ ${(q-)@}"$'\e[0m'
   "$@"
 }

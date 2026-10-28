@@ -14,7 +14,7 @@ Each command prints the full `sf` command before running it, so you always know 
 ## Requirements
 
 - zsh
-- [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`)
+- [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`), or [Node.js](https://nodejs.org) — if `sf` isn't installed, the shortcuts run it through `npx -y @salesforce/cli` (slower, and the first run downloads the CLI)
 - git (for `sfdbranch`)
 - [jq](https://jqlang.github.io/jq/) (optional, used to read `sfdx-project.json` more reliably)
 

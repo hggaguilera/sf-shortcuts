@@ -123,5 +123,20 @@ check "outside a project" \
   "sf-shortcuts: run this from the project root (no sfdx-project.json here)" \
   sfdcls A
 
+# --- no sf installed ---
+unfunction sf
+mkdir -p $TMP/bin $TMP/empty
+print -r -- '#!/bin/sh
+echo "npx $*"' > $TMP/bin/npx
+chmod +x $TMP/bin/npx
+with_npx() { local -a path=($TMP/bin); sforgs }
+without_npx() { local -a path=($TMP/empty); sforgs }
+check "falls back to npx" \
+  "npx -y @salesforce/cli org list" \
+  with_npx
+check "no sf and no npx" \
+  "sf-shortcuts: Salesforce CLI not found. Install it (brew install sf, or npm install -g @salesforce/cli) or install Node so npx can run it" \
+  without_npx
+
 print "$pass passed, $fail failed"
 (( fail == 0 ))
