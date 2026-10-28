@@ -23,7 +23,7 @@ Each command prints the full `sf` command before running it, so you always know 
 **Oh My Zsh**
 
 ```zsh
-git clone https://github.com/hggaguilera/zsh-sf-shortcuts ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/sf-shortcuts
+git clone https://github.com/hggaguilera/sf-shortcuts ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/sf-shortcuts
 ```
 
 Then add `sf-shortcuts` to the `plugins=(...)` line in `~/.zshrc`.
@@ -31,19 +31,19 @@ Then add `sf-shortcuts` to the `plugins=(...)` line in `~/.zshrc`.
 **zinit**
 
 ```zsh
-zinit light <your-user>/zsh-sf-shortcuts
+zinit light hggaguilera/sf-shortcuts
 ```
 
 **antidote** — add this line to `~/.zsh_plugins.txt`:
 
 ```
-<your-user>/zsh-sf-shortcuts
+hggaguilera/sf-shortcuts
 ```
 
 **No plugin manager**
 
 ```zsh
-git clone https://github.com/hggaguilera/zsh-sf-shortcuts ~/.zsh/sf-shortcuts
+git clone https://github.com/hggaguilera/sf-shortcuts ~/.zsh/sf-shortcuts
 echo 'source ~/.zsh/sf-shortcuts/sf-shortcuts.plugin.zsh' >> ~/.zshrc
 ```
 
