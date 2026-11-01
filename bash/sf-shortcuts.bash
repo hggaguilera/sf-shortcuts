@@ -575,7 +575,8 @@ _sf_shortcuts_complete() {
     sfdcls|sfrcls|sftest)    _sf_complete_names classes .cls ;;
     sftestm)
       _sf_complete_names classes .cls .
-      type compopt >/dev/null 2>&1 && compopt -o nospace
+      # compopt is bash 4+, and only works during a real completion
+      compopt -o nospace 2>/dev/null
       ;;
     sfdtrg)                  _sf_complete_names triggers .trigger ;;
     sfdlwc|sfrlwc)           _sf_complete_names lwc ;;

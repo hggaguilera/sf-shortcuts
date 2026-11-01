@@ -3,6 +3,9 @@
 # throwaway SFDX project, and checks the command each one would have run.
 # Usage: pwsh tests/run.ps1
 
+# GitHub Actions runs pwsh with 'Stop', which would turn the expected usage errors into exceptions
+$ErrorActionPreference = 'Continue'
+
 $module = Join-Path $PSScriptRoot '..' 'powershell' 'SfShortcuts.psd1'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "sf-shortcuts-$([guid]::NewGuid())"
 New-Item -ItemType Directory $tmp | Out-Null
