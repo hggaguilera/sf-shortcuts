@@ -3,6 +3,10 @@
 # throwaway SFDX project, and checks the command each one would have run.
 # Usage: pwsh tests/run.ps1
 
+# GitHub Actions runs pwsh with a global 'Stop', which would turn the expected usage errors into
+# exceptions. Module functions read the global value, so setting it in this script isn't enough.
+$global:ErrorActionPreference = 'Continue'
+
 $module = Join-Path $PSScriptRoot '..' 'powershell' 'SfShortcuts.psd1'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "sf-shortcuts-$([guid]::NewGuid())"
 New-Item -ItemType Directory $tmp | Out-Null
@@ -150,7 +154,10 @@ try {
     Pop-Location
 
     # --- no sf installed ---
-    Remove-Item function:global:sf
+    # Unqualified on purpose: "function:global:sf" finds the global scope but then looks for a
+    # function literally named "global:sf", so it silently removes nothing
+    Remove-Item Function:\sf
+    if (Get-Command sf -CommandType Function -ErrorAction Ignore) { throw 'Could not remove the fake sf function' }
     $bin = New-Item -ItemType Directory (Join-Path $tmp bin)
     $empty = New-Item -ItemType Directory (Join-Path $tmp empty)
     Set-Content (Join-Path $bin npx) "#!/bin/sh`necho `"npx `$*`""

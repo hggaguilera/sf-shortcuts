@@ -34,6 +34,7 @@ jobs:
   powershell:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
@@ -51,4 +52,4 @@ jobs:
           Test-ModuleManifest powershell/SfShortcuts.psd1 | Out-Null
 
       - name: Run tests
-        run: ./tests/run.ps1
+        run: pwsh -NoProfile -File tests/run.ps1
