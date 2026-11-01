@@ -3,8 +3,9 @@
 # throwaway SFDX project, and checks the command each one would have run.
 # Usage: pwsh tests/run.ps1
 
-# GitHub Actions runs pwsh with 'Stop', which would turn the expected usage errors into exceptions
-$ErrorActionPreference = 'Continue'
+# GitHub Actions runs pwsh with a global 'Stop', which would turn the expected usage errors into
+# exceptions. Module functions read the global value, so setting it in this script isn't enough.
+$global:ErrorActionPreference = 'Continue'
 
 $module = Join-Path $PSScriptRoot '..' 'powershell' 'SfShortcuts.psd1'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "sf-shortcuts-$([guid]::NewGuid())"
