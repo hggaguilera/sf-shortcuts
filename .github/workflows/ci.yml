@@ -17,8 +17,36 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh
 
-      - name: Check syntax
+      - name: Check syntax (zsh)
         run: zsh -n sf-shortcuts.plugin.zsh
 
-      - name: Run tests
+      - name: Run tests (zsh)
         run: zsh tests/run.zsh
+
+      - name: Check syntax (bash)
+        run: bash -n bash/sf-shortcuts.bash
+
+      - name: Run tests (bash)
+        run: bash tests/run.bash
+
+  powershell:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check syntax
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/powershell/SfShortcuts.psm1", [ref]$null, [ref]$errors) | Out-Null
+          $errors | ForEach-Object { "$($_.Extent.StartLineNumber): $($_.Message)" }
+          if ($errors) { exit 1 }
+          Test-ModuleManifest powershell/SfShortcuts.psd1 | Out-Null
+
+      - name: Run tests
+        run: ./tests/run.ps1

@@ -1,6 +1,6 @@
 # sf-shortcuts
 
-Short, predictable zsh commands for the Salesforce CLI (`sf`), with tab completion for your classes, components and orgs.
+Short, predictable commands for the Salesforce CLI (`sf`), with tab completion for your classes, components and orgs. Works in **zsh** and **bash** on macOS and Linux, and in **PowerShell 7** on Windows (or anywhere `pwsh` runs).
 
 ```zsh
 sfdcls AccountService AccountServiceTest -t AccountServiceTest   # deploy two classes, run one test
@@ -13,12 +13,14 @@ Each command prints the full `sf` command before running it, so you always know 
 
 ## Requirements
 
-- zsh
+- zsh, bash 3.2+ or PowerShell 7+
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`), or [Node.js](https://nodejs.org) — if `sf` isn't installed, the shortcuts run it through `npx -y @salesforce/cli` (slower, and the first run downloads the CLI)
 - git (for `sfdbranch`)
-- [jq](https://jqlang.github.io/jq/) (optional, used to read `sfdx-project.json` more reliably)
+- [jq](https://jqlang.github.io/jq/) (optional for zsh and bash, used to read `sfdx-project.json` more reliably; PowerShell doesn't need it)
 
 ## Install
+
+### zsh
 
 **Oh My Zsh**
 
@@ -48,6 +50,31 @@ echo 'source ~/.zsh/sf-shortcuts/sf-shortcuts.plugin.zsh' >> ~/.zshrc
 ```
 
 For tab completion, source the plugin after `compinit` runs. Oh My Zsh and most plugin managers already do this.
+
+### bash
+
+```bash
+git clone https://github.com/hggaguilera/sf-shortcuts ~/.bash/sf-shortcuts
+echo 'source ~/.bash/sf-shortcuts/bash/sf-shortcuts.bash' >> ~/.bashrc
+```
+
+On macOS, bash login shells read `~/.bash_profile` instead, so add the `source` line there if that's what your terminal opens.
+
+### PowerShell 7
+
+```powershell
+git clone https://github.com/hggaguilera/sf-shortcuts "$HOME\sf-shortcuts"
+New-Item -ItemType Directory -Force (Split-Path $PROFILE) | Out-Null
+Add-Content $PROFILE "`nImport-Module `"$HOME\sf-shortcuts\powershell\SfShortcuts.psd1`""
+```
+
+Restart PowerShell (or run `. $PROFILE`). The module needs PowerShell 7 (`pwsh`); it doesn't load in Windows PowerShell 5.1.
+
+PowerShell differs from zsh and bash in a few places:
+
+- **sf flags:** PowerShell drops a bare `--` before the command sees it, so everything from the first `--flag` on goes to `sf`: `sfdlwc myComp --ignore-conflicts` (`sfdlwc myComp -- --ignore-conflicts` also works). To pass short flags, quote the separator: `sftestall '--' -w 30`.
+- **Settings** are environment variables: `$env:SF_TEST_WAIT = 30`. Put them in `$PROFILE` to keep them.
+- **Errors** (usage, missing project) are written to the error stream, so `$?` is `$false` afterwards.
 
 ## How it works
 
@@ -123,7 +150,7 @@ Add `-- --use-tooling-api` to `sfq` to query the Tooling API.
 
 ## Settings
 
-All optional. Set them in `~/.zshrc`, or for one command (`SF_TEST_WAIT=30 sftestall`).
+All optional. Set them in `~/.zshrc` / `~/.bashrc`, or for one command (`SF_TEST_WAIT=30 sftestall`). In PowerShell, set `$env:SF_TEST_WAIT = 30` (in `$PROFILE` to keep it).
 
 | Variable | What it does | Default |
 |---|---|---|
@@ -140,11 +167,13 @@ All optional. Set them in `~/.zshrc`, or for one command (`SF_TEST_WAIT=30 sftes
 
 ## Development
 
-```zsh
-zsh tests/run.zsh
-```
+| Shell | Code | Tests |
+|---|---|---|
+| zsh | `sf-shortcuts.plugin.zsh` | `zsh tests/run.zsh` |
+| bash | `bash/sf-shortcuts.bash` | `bash tests/run.bash` |
+| PowerShell 7 | `powershell/SfShortcuts.psm1` (+ `.psd1` manifest) | `pwsh tests/run.ps1` |
 
-The tests replace `sf` with a function that prints its arguments, so nothing is sent to an org.
+The three versions provide the same commands and should stay in sync. The tests replace `sf` with a function that prints its arguments, so nothing is sent to an org. CI runs zsh and bash on Linux and macOS, and PowerShell on Linux, macOS and Windows.
 
 ## License
 
