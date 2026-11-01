@@ -1,0 +1,58 @@
+name: Release
+
+# Push a version tag to release:  git tag v1.2.0 && git push origin v1.2.0
+# Runs the tests, attaches one zip per shell to a GitHub release, and publishes
+# the PowerShell module to the PowerShell Gallery (needs the PSGALLERY_API_KEY secret).
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  github-release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zips
+        run: bash scripts/package.sh "$GITHUB_REF_NAME"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS --verify-tag --generate-notes
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SfShortcuts
+          path: dist/SfShortcuts
+
+  powershell-gallery:
+    needs: github-release
+    runs-on: ubuntu-latest
+    env:
+      PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SfShortcuts
+          path: SfShortcuts
+
+      - name: Skip (no PSGALLERY_API_KEY secret)
+        if: env.PSGALLERY_API_KEY == ''
+        run: Write-Warning 'PSGALLERY_API_KEY is not set, so the module was not published to the PowerShell Gallery.'
+
+      - name: Publish to the PowerShell Gallery
+        if: env.PSGALLERY_API_KEY != ''
+        run: |
+          Test-ModuleManifest SfShortcuts/SfShortcuts.psd1 | Format-List Name, Version
+          Publish-PSResource -Path SfShortcuts -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY

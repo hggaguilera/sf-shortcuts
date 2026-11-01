@@ -20,6 +20,8 @@ Each command prints the full `sf` command before running it, so you always know 
 
 ## Install
 
+Each [release](https://github.com/hggaguilera/sf-shortcuts/releases) has one zip per shell (`sf-shortcuts-zsh.zip`, `sf-shortcuts-bash.zip`, `sf-shortcuts-powershell.zip`), so you only download the version you use. You can also clone the repo, or download the single file you need.
+
 ### zsh
 
 **Oh My Zsh**
@@ -28,7 +30,12 @@ Each command prints the full `sf` command before running it, so you always know 
 git clone https://github.com/hggaguilera/sf-shortcuts ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/sf-shortcuts
 ```
 
-Then add `sf-shortcuts` to the `plugins=(...)` line in `~/.zshrc`.
+Then add `sf-shortcuts` to the `plugins=(...)` line in `~/.zshrc`. Without git, unzip the release into the same place:
+
+```zsh
+curl -fsSLo /tmp/sf-shortcuts-zsh.zip https://github.com/hggaguilera/sf-shortcuts/releases/latest/download/sf-shortcuts-zsh.zip
+unzip -o /tmp/sf-shortcuts-zsh.zip -d ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
+```
 
 **zinit**
 
@@ -45,7 +52,8 @@ hggaguilera/sf-shortcuts
 **No plugin manager**
 
 ```zsh
-git clone https://github.com/hggaguilera/sf-shortcuts ~/.zsh/sf-shortcuts
+curl -fsSLo /tmp/sf-shortcuts-zsh.zip https://github.com/hggaguilera/sf-shortcuts/releases/latest/download/sf-shortcuts-zsh.zip
+unzip -o /tmp/sf-shortcuts-zsh.zip -d ~/.zsh     # creates ~/.zsh/sf-shortcuts/
 echo 'source ~/.zsh/sf-shortcuts/sf-shortcuts.plugin.zsh' >> ~/.zshrc
 ```
 
@@ -53,22 +61,64 @@ For tab completion, source the plugin after `compinit` runs. Oh My Zsh and most 
 
 ### bash
 
+**Release zip**
+
 ```bash
-git clone https://github.com/hggaguilera/sf-shortcuts ~/.bash/sf-shortcuts
-echo 'source ~/.bash/sf-shortcuts/bash/sf-shortcuts.bash' >> ~/.bashrc
+curl -fsSLo /tmp/sf-shortcuts-bash.zip https://github.com/hggaguilera/sf-shortcuts/releases/latest/download/sf-shortcuts-bash.zip
+unzip -o /tmp/sf-shortcuts-bash.zip -d ~/.bash   # creates ~/.bash/sf-shortcuts/
+echo 'source ~/.bash/sf-shortcuts/sf-shortcuts.bash' >> ~/.bashrc
 ```
+
+**Just the file** (latest from `main`)
+
+```bash
+mkdir -p ~/.bash/sf-shortcuts
+curl -fsSL https://raw.githubusercontent.com/hggaguilera/sf-shortcuts/main/bash/sf-shortcuts.bash -o ~/.bash/sf-shortcuts/sf-shortcuts.bash
+echo 'source ~/.bash/sf-shortcuts/sf-shortcuts.bash' >> ~/.bashrc
+```
+
+To update, run the download again.
 
 On macOS, bash login shells read `~/.bash_profile` instead, so add the `source` line there if that's what your terminal opens.
 
 ### PowerShell 7
 
+The module needs PowerShell 7 (`pwsh`); it doesn't load in Windows PowerShell 5.1.
+
+**PowerShell Gallery** (recommended)
+
 ```powershell
-git clone https://github.com/hggaguilera/sf-shortcuts "$HOME\sf-shortcuts"
+Install-PSResource SfShortcuts             # or: Install-Module SfShortcuts -Scope CurrentUser
 New-Item -ItemType Directory -Force (Split-Path $PROFILE) | Out-Null
-Add-Content $PROFILE "`nImport-Module `"$HOME\sf-shortcuts\powershell\SfShortcuts.psd1`""
+Add-Content $PROFILE "`nImport-Module SfShortcuts"
 ```
 
-Restart PowerShell (or run `. $PROFILE`). The module needs PowerShell 7 (`pwsh`); it doesn't load in Windows PowerShell 5.1.
+Update later with `Update-PSResource SfShortcuts` (or `Update-Module SfShortcuts`). The `Import-Module` line in your profile loads tab completion when PowerShell starts.
+
+**Release zip** — unzips into your personal module folder:
+
+```powershell
+$modules = ($env:PSModulePath -split [IO.Path]::PathSeparator)[0]
+$zip = Join-Path ([IO.Path]::GetTempPath()) 'sf-shortcuts-powershell.zip'
+Invoke-WebRequest https://github.com/hggaguilera/sf-shortcuts/releases/latest/download/sf-shortcuts-powershell.zip -OutFile $zip
+Expand-Archive $zip -DestinationPath $modules -Force   # creates <modules>/SfShortcuts/
+New-Item -ItemType Directory -Force (Split-Path $PROFILE) | Out-Null
+Add-Content $PROFILE "`nImport-Module SfShortcuts"
+```
+
+**Just the files** (latest from `main`)
+
+```powershell
+$dir = Join-Path ($env:PSModulePath -split [IO.Path]::PathSeparator)[0] 'SfShortcuts'
+New-Item -ItemType Directory -Force $dir | Out-Null
+foreach ($f in 'SfShortcuts.psd1', 'SfShortcuts.psm1') {
+    Invoke-WebRequest "https://raw.githubusercontent.com/hggaguilera/sf-shortcuts/main/powershell/$f" -OutFile (Join-Path $dir $f)
+}
+New-Item -ItemType Directory -Force (Split-Path $PROFILE) | Out-Null
+Add-Content $PROFILE "`nImport-Module SfShortcuts"
+```
+
+Restart PowerShell (or run `. $PROFILE`) afterwards.
 
 PowerShell differs from zsh and bash in a few places:
 
@@ -174,6 +224,13 @@ All optional. Set them in `~/.zshrc` / `~/.bashrc`, or for one command (`SF_TEST
 | PowerShell 7 | `powershell/SfShortcuts.psm1` (+ `.psd1` manifest) | `pwsh tests/run.ps1` |
 
 The three versions provide the same commands and should stay in sync. The tests replace `sf` with a function that prints its arguments, so nothing is sent to an org. CI runs zsh and bash on Linux and macOS, and PowerShell on Linux, macOS and Windows.
+
+### Releasing
+
+1. Push a version tag: `git tag v1.2.0 && git push origin v1.2.0`.
+2. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the zips with `scripts/package.sh` (which sets the PowerShell module's `ModuleVersion` from the tag), creates the GitHub release with the zips and a `SHA256SUMS` file, and publishes the module to the PowerShell Gallery.
+
+Publishing to the gallery needs a `PSGALLERY_API_KEY` repository secret, holding an API key from your [PowerShell Gallery account](https://www.powershellgallery.com/account/apikeys) with push rights for `SfShortcuts`. Without the secret, the GitHub release is still created and the gallery step is skipped. To build the zips locally: `bash scripts/package.sh 1.2.0` (output goes to `dist/`).
 
 ## License
 
