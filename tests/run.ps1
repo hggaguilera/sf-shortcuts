@@ -154,7 +154,10 @@ try {
     Pop-Location
 
     # --- no sf installed ---
-    Remove-Item function:global:sf
+    # Unqualified on purpose: "function:global:sf" finds the global scope but then looks for a
+    # function literally named "global:sf", so it silently removes nothing
+    Remove-Item Function:\sf
+    if (Get-Command sf -CommandType Function -ErrorAction Ignore) { throw 'Could not remove the fake sf function' }
     $bin = New-Item -ItemType Directory (Join-Path $tmp bin)
     $empty = New-Item -ItemType Directory (Join-Path $tmp empty)
     Set-Content (Join-Path $bin npx) "#!/bin/sh`necho `"npx `$*`""
