@@ -1,6 +1,14 @@
 # sf-shortcuts
 
+[![CI](https://github.com/hggaguilera/sf-shortcuts/actions/workflows/ci.yml/badge.svg)](https://github.com/hggaguilera/sf-shortcuts/actions/workflows/ci.yml)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/SfShortcuts?label=PowerShell%20Gallery)](https://www.powershellgallery.com/packages/SfShortcuts)
+[![PowerShell Gallery downloads](https://img.shields.io/powershellgallery/dt/SfShortcuts?label=downloads)](https://www.powershellgallery.com/packages/SfShortcuts)
+[![Mentioned in Awesome zsh plugins](https://awesome.re/mentioned-badge.svg)](https://github.com/unixorn/awesome-zsh-plugins)
+[![License: MIT](https://img.shields.io/github/license/hggaguilera/sf-shortcuts)](LICENSE)
+
 Short, predictable commands for the Salesforce CLI (`sf`), with tab completion for your classes, components and orgs. Works in **zsh** and **bash** on macOS and Linux, and in **PowerShell 7** on Windows (or anywhere `pwsh` runs).
+
+![Demo: deploying a class with tab completion, deploying an LWC to another org, dry-running a branch deploy and running a SOQL query](docs/demo.gif)
 
 ```zsh
 sfdcls AccountService AccountServiceTest -t AccountServiceTest   # deploy two classes, run one test
@@ -10,6 +18,26 @@ sfdcheck sfdbranch                                                # ...or dry-ru
 ```
 
 Each command prints the full `sf` command before running it, so you always know what it did.
+
+## Why
+
+The Salesforce CLI is powerful but wordy. Deploying one class and running its test looks like this:
+
+```zsh
+sf project deploy start --source-dir force-app/main/default/classes/AccountService.cls --test-level RunSpecifiedTests --tests AccountServiceTest
+```
+
+With sf-shortcuts it's:
+
+```zsh
+sfdcls AccountService -t AccountServiceTest
+```
+
+- **Less typing, fewer typos.** Commands follow one pattern (`sf` + action + type), so once you know `sfdcls` you can guess `sfdtrg`, `sfdlwc` and `sfrcls`.
+- **Tab completion from your project.** Class, trigger, LWC, flow and object names are read from your source folder, org aliases come from the CLI, and test classes complete after `-t`.
+- **Deploy what you changed.** `sfdbranch` deploys every file you changed on your git branch, and `sfdcheck` or `sfdpreview` let you dry-run or preview any deploy first.
+- **Nothing hidden.** Every shortcut prints the exact `sf` command it runs, and anything after `--` goes straight to `sf`.
+- **Same commands everywhere:** zsh, bash and PowerShell 7, on macOS, Linux and Windows.
 
 ## Requirements
 

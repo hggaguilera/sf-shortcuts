@@ -18,7 +18,7 @@
     AliasesToExport      = @()
     PrivateData          = @{
         PSData = @{
-            Tags       = @('Salesforce', 'sf', 'sfdx', 'cli')
+            Tags       = @('Salesforce', 'sf', 'sfdx', 'cli', 'apex', 'lwc', 'deploy', 'PSEdition_Core', 'Windows', 'Linux', 'MacOS')
             LicenseUri = 'https://github.com/hggaguilera/sf-shortcuts/blob/main/LICENSE'
             ProjectUri = 'https://github.com/hggaguilera/sf-shortcuts'
         }
