@@ -236,6 +236,15 @@ All optional. Set them in `~/.zshrc` / `~/.bashrc`, or for one command (`SF_TEST
 | `SF_BASE_BRANCH` | branch `sfdbranch` compares against | your remote's default branch, then `main`, then `master` |
 | `SF_TEST_WAIT` | minutes to wait for test results | `10` |
 
+In PowerShell:
+
+```powershell
+$env:SF_TEST_WAIT = 30                                # this session only
+Add-Content $PROFILE "`n`$env:SF_TEST_WAIT = 30"      # every session (restart PowerShell or run . $PROFILE)
+$env:SF_TEST_WAIT = 30; sftestall; Remove-Item env:SF_TEST_WAIT   # one command only
+Remove-Item env:SF_TEST_WAIT                          # clear it, so the default applies again
+```
+
 ## Tab completion
 
 - Names of classes, triggers, LWCs, Aura components, objects, flows, layouts, permission sets and custom metadata records, read from your project.
