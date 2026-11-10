@@ -11,8 +11,76 @@
 #   SF_SOURCE_DIR   metadata folder; default: read from sfdx-project.json
 #   SF_BASE_BRANCH  branch sfdbranch compares against; default: origin's HEAD, then main/master
 #   SF_TEST_WAIT    minutes to wait for test results; default: 10
+#   SF_SHORTCUTS_NO_UPDATE_CHECK  set to 1 to turn off the update notice
 
 : ${SF_TEST_WAIT:=10}
+
+# Set with scripts/bump-version.sh before tagging a release
+_SF_SHORTCUTS_VERSION=3.0.1
+_SF_SHORTCUTS_DIR=${${(%):-%x}:A:h}
+_SF_SHORTCUTS_REPO=https://github.com/hggaguilera/sf-shortcuts
+
+# ---------- update notice ----------
+
+# True if version $1 is newer than version $2
+_sf_version_newer() {
+  local a b c x y z
+  IFS=. read -r a b c <<< "$1"
+  IFS=. read -r x y z <<< "$2"
+  (( 10#$a * 1000000 + 10#$b * 1000 + 10#$c > 10#$x * 1000000 + 10#$y * 1000 + 10#$z ))
+}
+
+# Prints how to update this install
+_sf_update_hint() {
+  local origin
+  origin=$(command git -C "$_SF_SHORTCUTS_DIR" remote get-url origin 2>/dev/null)
+  if [[ $origin == *sf-shortcuts* ]]; then
+    print -r -- "git -C ${(q-)_SF_SHORTCUTS_DIR} pull"
+  else
+    print -r -- "$_SF_SHORTCUTS_REPO#install"
+  fi
+}
+
+# Saves the latest released version, found in the redirect of the "latest release" page.
+# Keeps what's saved if the request fails or the response has no version in it.
+_sf_update_fetch() {
+  local dir=${XDG_CACHE_HOME:-$HOME/.cache}/sf-shortcuts headers latest
+  headers=$(command curl -fsSI --max-time 5 "$_SF_SHORTCUTS_REPO/releases/latest" 2>/dev/null) || return 0
+  [[ $headers =~ '/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+)' ]] || return 0
+  latest=$match[1]
+  command mkdir -p $dir || return 0
+  print -r -- "$latest $(command date +%s)" >| $dir/latest-version.$$ || return 0
+  command mv -f $dir/latest-version.$$ $dir/latest-version
+}
+
+# Fetches in a detached process, so the command never waits on the network
+_sf_update_refresh() {
+  (( $+commands[curl] )) || return 0
+  ( _sf_update_fetch </dev/null >/dev/null 2>&1 & )
+}
+
+# Shows the notice (at most once a day) and refreshes the saved version (at most once a week).
+# Only reads local files, so it adds no noticeable time to a command.
+_sf_update_tick() {
+  [[ -z $SF_SHORTCUTS_NO_UPDATE_CHECK ]] || return 0
+  local dir=${XDG_CACHE_HOME:-$HOME/.cache}/sf-shortcuts
+  local latest= checked= noticed= now
+  now=$(command date +%s)
+  [[ -r $dir/latest-version ]] && read -r latest checked < $dir/latest-version
+  [[ -r $dir/last-notice ]] && read -r noticed < $dir/last-notice
+  if [[ ! $latest =~ '^[0-9]+\.[0-9]+\.[0-9]+$' || ! $checked =~ '^[0-9]+$' ]]; then
+    latest= checked=0
+  fi
+  [[ $noticed =~ '^[0-9]+$' ]] || noticed=0
+
+  if [[ -n $latest ]] && _sf_version_newer $latest $_SF_SHORTCUTS_VERSION && (( now - noticed >= 86400 )); then
+    print -u2 -r -- "sf-shortcuts $latest is available (you have $_SF_SHORTCUTS_VERSION). Update: $(_sf_update_hint)"
+    { print -r -- $now >| $dir/last-notice } 2>/dev/null
+  fi
+  if (( now - checked >= 604800 )); then
+    _sf_update_refresh
+  fi
+}
 
 # ---------- internals ----------
 
@@ -111,6 +179,10 @@ _sf_run() {
     fi
     shift
     set -- npx -y @salesforce/cli "$@"
+  fi
+  # Only in a terminal, so scripts and pipes are never affected
+  if [[ -t 2 ]]; then
+    _sf_update_tick
   fi
   print -r -- $'\e[2m'"→ ${(q-)@}"$'\e[0m'
   "$@"
@@ -484,6 +556,7 @@ Settings (env vars, all optional)
   SF_SOURCE_DIR   metadata folder        (default: from sfdx-project.json)
   SF_BASE_BRANCH  sfdbranch base branch  (default: origin HEAD, then main/master)
   SF_TEST_WAIT    test wait in minutes   (default: 10)
+  SF_SHORTCUTS_NO_UPDATE_CHECK=1         turn off the update notice
 EOF
 }
 

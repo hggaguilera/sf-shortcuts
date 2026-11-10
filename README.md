@@ -235,6 +235,7 @@ All optional. Set them in `~/.zshrc` / `~/.bashrc`, or for one command (`SF_TEST
 | `SF_SOURCE_DIR` | folder that holds your metadata | the default package in `sfdx-project.json`, plus `/main/default` if that folder exists |
 | `SF_BASE_BRANCH` | branch `sfdbranch` compares against | your remote's default branch, then `main`, then `master` |
 | `SF_TEST_WAIT` | minutes to wait for test results | `10` |
+| `SF_SHORTCUTS_NO_UPDATE_CHECK` | set to `1` to turn off the update notice | not set |
 
 In PowerShell:
 
@@ -244,6 +245,18 @@ Add-Content $PROFILE "`n`$env:SF_TEST_WAIT = 30"      # every session (restart P
 $env:SF_TEST_WAIT = 30; sftestall; Remove-Item env:SF_TEST_WAIT   # one command only
 Remove-Item env:SF_TEST_WAIT                          # clear it, so the default applies again
 ```
+
+## Update notice
+
+When a newer release is out, a command tells you how to update, then runs as usual:
+
+```
+sf-shortcuts 3.1.0 is available (you have 3.0.1). Update: git -C ~/.oh-my-zsh/custom/plugins/sf-shortcuts pull
+```
+
+The notice shows at most once a day, and only in a terminal, so scripts and piped output aren't affected. The update command matches how you installed: `git pull` for git installs (Oh My Zsh, zinit, antidote), `Update-PSResource` or `Update-Module` for the PowerShell Gallery, and a link to the [install steps](#install) for zips and single files.
+
+At most once a week, a command starts a small background process that asks GitHub for the latest release number and saves it in your cache folder (`~/.cache/sf-shortcuts`, or `%LOCALAPPDATA%\sf-shortcuts` on Windows). Your command never waits for it, and if you're offline nothing happens. Nothing about you or your project is sent. To turn this off, set `SF_SHORTCUTS_NO_UPDATE_CHECK=1`.
 
 ## Tab completion
 
@@ -264,10 +277,11 @@ The three versions provide the same commands and should stay in sync. The tests 
 
 ### Releasing
 
-1. Push a version tag: `git tag v1.2.0 && git push origin v1.2.0`.
-2. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the zips with `scripts/package.sh` (which sets the PowerShell module's `ModuleVersion` from the tag), creates the GitHub release with the zips and a `SHA256SUMS` file, and publishes the module to the PowerShell Gallery.
+1. Set the version in all three ports and commit it: `bash scripts/bump-version.sh 1.2.0`.
+2. Push a version tag: `git tag v1.2.0 && git push origin v1.2.0`.
+3. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the zips with `scripts/package.sh` (which fails if the ports don't declare the tag's version), creates the GitHub release with the zips and a `SHA256SUMS` file, and publishes the module to the PowerShell Gallery.
 
-Publishing to the gallery needs a `PSGALLERY_API_KEY` repository secret, holding an API key from your [PowerShell Gallery account](https://www.powershellgallery.com/account/apikeys) with push rights for `SfShortcuts`. Without the secret, the GitHub release is still created and the gallery step is skipped. To build the zips locally: `bash scripts/package.sh 1.2.0` (output goes to `dist/`).
+Publishing to the gallery needs a `PSGALLERY_API_KEY` repository secret, holding an API key from your [PowerShell Gallery account](https://www.powershellgallery.com/account/apikeys) with push rights for `SfShortcuts`. Without the secret, the GitHub release is still created and the gallery step is skipped. To build the zips locally: `bash scripts/package.sh 1.2.0`, using the version the ports currently declare (output goes to `dist/`).
 
 ## License
 

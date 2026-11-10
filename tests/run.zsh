@@ -7,7 +7,8 @@ PLUGIN=${0:A:h:h}/sf-shortcuts.plugin.zsh
 TMP=$(mktemp -d)
 trap 'rm -rf $TMP' EXIT
 
-unset SF_SOURCE_DIR SF_BASE_BRANCH SF_TEST_WAIT
+unset SF_SOURCE_DIR SF_BASE_BRANCH SF_TEST_WAIT SF_SHORTCUTS_NO_UPDATE_CHECK
+export XDG_CACHE_HOME=$TMP/cache
 source $PLUGIN
 
 # Fake sf: prints the arguments it received
@@ -122,6 +123,105 @@ cd /
 check "outside a project" \
   "sf-shortcuts: run this from the project root (no sfdx-project.json here)" \
   sfdcls A
+
+# --- update notice ---
+INSTALL=https://github.com/hggaguilera/sf-shortcuts#install
+CACHE=$XDG_CACHE_HOME/sf-shortcuts
+NOW=$(date +%s)
+DAY=86400 WEEK=604800
+_SF_SHORTCUTS_VERSION=3.9.0
+mkdir -p $TMP/notours $TMP/curlbin
+# Inside the test repo, which has no origin: the hint must not suggest git
+_SF_SHORTCUTS_DIR=$TMP/notours
+
+# seed <latest-version> <seconds since checked> [<seconds since notice>]
+seed() {
+  rm -rf $CACHE
+  mkdir -p $CACHE
+  print -r -- "$1 $(( NOW - $2 ))" > $CACHE/latest-version
+  [[ -n $3 ]] && print -r -- "$(( NOW - $3 ))" > $CACHE/last-notice
+}
+# Runs the check with the background refresh replaced by a visible marker
+tick() {
+  _sf_update_refresh() { print -r -- refresh }
+  _sf_update_tick
+}
+
+seed 3.10.0 0
+check "notice when a newer version is known (numeric compare, 10 > 9)" \
+  "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $INSTALL" \
+  tick
+check "notice shows once a day" "" tick
+seed 3.10.0 0 $(( DAY - 60 ))
+check "no notice within a day of the last one" "" tick
+seed 3.10.0 0 $(( DAY + 60 ))
+check "notice returns after a day" \
+  "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $INSTALL" \
+  tick
+seed 3.9.0 0
+check "no notice on the latest version" "" tick
+seed 3.8.9 0
+check "no notice when ahead of the latest version" "" tick
+seed 3.9.0 $(( WEEK - 60 ))
+check "no refresh within a week" "" tick
+seed 3.9.0 $(( WEEK + 60 ))
+check "refresh after a week" "refresh" tick
+rm -rf $CACHE
+check "refresh when nothing is cached" "refresh" tick
+seed 'not-a-version' 0
+check "corrupt cache is ignored and refreshed" "refresh" tick
+seed 3.10.0 $(( WEEK + 60 ))
+check "stale cache notifies and refreshes" \
+  "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $INSTALL
+refresh" \
+  tick
+seed 3.10.0 $(( WEEK + 60 ))
+opted_out() { SF_SHORTCUTS_NO_UPDATE_CHECK=1 tick }
+check "opt-out skips the notice and the refresh" "" opted_out
+seed 3.10.0 $(( WEEK + 60 ))
+check "piped commands skip the notice" "sf org list" sforgs
+check "piped commands don't mark the notice as shown" "no" \
+  eval '[[ -e $CACHE/last-notice ]] && print yes || print no'
+
+# Install-specific instructions
+git init -q $TMP/clone
+git -C $TMP/clone remote add origin https://github.com/hggaguilera/sf-shortcuts.git
+clone_hint() { _SF_SHORTCUTS_DIR=$TMP/clone _sf_update_hint }
+check "git installs get a pull command" "git -C $TMP/clone pull" clone_hint
+check "other git repos get the install link" "$INSTALL" _sf_update_hint
+
+# Fetching the latest version
+print -r -- '#!/bin/sh
+printf "HTTP/2 302\r\nlocation: https://github.com/hggaguilera/sf-shortcuts/releases/tag/v3.11.2\r\n\r\n"' > $TMP/curlbin/curl
+chmod +x $TMP/curlbin/curl
+OLDPATH=$PATH
+export PATH=$TMP/curlbin:$PATH
+rm -rf $CACHE
+_sf_update_fetch
+check "fetch saves the version from the redirect" "3.11.2" \
+  eval 'read -r v t < $CACHE/latest-version; print -r -- $v'
+
+rm -rf $CACHE
+_sf_update_refresh
+for i in {1..50}; do
+  [[ -s $CACHE/latest-version ]] && break
+  sleep 0.1
+done
+check "refresh fetches in the background" "3.11.2" \
+  eval 'read -r v t < $CACHE/latest-version; print -r -- $v'
+
+print -r -- '#!/bin/sh
+printf "HTTP/1.1 200 OK\r\n\r\n"' > $TMP/curlbin/curl
+seed 3.5.0 0
+_sf_update_fetch
+check "a response without a version keeps the cache" "3.5.0" \
+  eval 'read -r v t < $CACHE/latest-version; print -r -- $v'
+print -r -- '#!/bin/sh
+exit 6' > $TMP/curlbin/curl
+_sf_update_fetch
+check "a failed request keeps the cache" "3.5.0" \
+  eval 'read -r v t < $CACHE/latest-version; print -r -- $v'
+export PATH=$OLDPATH
 
 # --- no sf installed ---
 unfunction sf

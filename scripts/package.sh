@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds one zip per shell for a release, plus SHA256SUMS, into dist/.
-# The PowerShell module's ModuleVersion is set to <version>.
+# Fails unless all three ports declare <version> (see scripts/bump-version.sh),
+# because the update notice compares that version with the latest release.
 # Usage: bash scripts/package.sh 1.2.0
 
 set -euo pipefail
@@ -13,6 +14,17 @@ if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+require_version() {
+  grep -Eq "$2" "$1" || {
+    echo "$1 doesn't declare version $version. Run: bash scripts/bump-version.sh $version" >&2
+    exit 1
+  }
+}
+require_version "$root/sf-shortcuts.plugin.zsh" "^_SF_SHORTCUTS_VERSION=$version\$"
+require_version "$root/bash/sf-shortcuts.bash" "^_SF_SHORTCUTS_VERSION=$version\$"
+require_version "$root/powershell/SfShortcuts.psd1" "^ *ModuleVersion *= *'$version'"
+
 dist=$root/dist
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -34,11 +46,6 @@ pack() {
 pack zsh sf-shortcuts "$root/sf-shortcuts.plugin.zsh"
 pack bash sf-shortcuts "$root/bash/sf-shortcuts.bash"
 pack powershell SfShortcuts "$root/powershell/SfShortcuts.psd1" "$root/powershell/SfShortcuts.psm1"
-
-psd1=$work/powershell/SfShortcuts/SfShortcuts.psd1
-sed -i.bak -E "s/^( *ModuleVersion *= *)'[^']*'/\1'$version'/" "$psd1"
-rm "$psd1.bak"
-grep -q "ModuleVersion *= *'$version'" "$psd1" || { echo "Could not set ModuleVersion in $psd1" >&2; exit 1; }
 
 for shell in zsh bash powershell; do
   (cd "$work/$shell" && zip -qr -X "$dist/sf-shortcuts-$shell.zip" .)

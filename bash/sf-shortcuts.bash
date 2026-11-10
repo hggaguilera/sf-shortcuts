@@ -11,13 +11,85 @@
 #   SF_SOURCE_DIR   metadata folder; default: read from sfdx-project.json
 #   SF_BASE_BRANCH  branch sfdbranch compares against; default: origin's HEAD, then main/master
 #   SF_TEST_WAIT    minutes to wait for test results; default: 10
+#   SF_SHORTCUTS_NO_UPDATE_CHECK  set to 1 to turn off the update notice
 
 : "${SF_TEST_WAIT:=10}"
+
+# Set with scripts/bump-version.sh before tagging a release
+_SF_SHORTCUTS_VERSION=3.0.1
+_SF_SHORTCUTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)
+_SF_SHORTCUTS_REPO=https://github.com/hggaguilera/sf-shortcuts
 
 # ---------- internals ----------
 
 _sf_err() {
   printf '%s\n' "$*" >&2
+}
+
+# ---------- update notice ----------
+
+# True if version $1 is newer than version $2
+_sf_version_newer() {
+  local a b c x y z
+  IFS=. read -r a b c <<< "$1"
+  IFS=. read -r x y z <<< "$2"
+  (( 10#$a * 1000000 + 10#$b * 1000 + 10#$c > 10#$x * 1000000 + 10#$y * 1000 + 10#$z ))
+}
+
+# Prints how to update this install
+_sf_update_hint() {
+  local origin
+  origin=$(command git -C "$_SF_SHORTCUTS_DIR" remote get-url origin 2>/dev/null)
+  if [[ $origin == *sf-shortcuts* ]]; then
+    printf 'git -C %q pull\n' "$_SF_SHORTCUTS_DIR"
+  else
+    printf '%s\n' "$_SF_SHORTCUTS_REPO#install"
+  fi
+}
+
+# Saves the latest released version, found in the redirect of the "latest release" page.
+# Keeps what's saved if the request fails or the response has no version in it.
+_sf_update_fetch() {
+  local dir=${XDG_CACHE_HOME:-$HOME/.cache}/sf-shortcuts headers latest
+  local re='/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+)'
+  headers=$(command curl -fsSI --max-time 5 "$_SF_SHORTCUTS_REPO/releases/latest" 2>/dev/null) || return 0
+  [[ $headers =~ $re ]] || return 0
+  latest=${BASH_REMATCH[1]}
+  # A backslash skips aliases. Not `command`: in a background subshell, bash 3.2 replaces
+  # the whole process with the command, so the rest of this function would never run.
+  \mkdir -p "$dir" || return 0
+  printf '%s\n' "$latest $(command date +%s)" >| "$dir/latest-version.$$" || return 0
+  \mv -f "$dir/latest-version.$$" "$dir/latest-version"
+}
+
+# Fetches in a detached process, so the command never waits on the network
+_sf_update_refresh() {
+  type -P curl >/dev/null || return 0
+  ( _sf_update_fetch </dev/null >/dev/null 2>&1 & )
+}
+
+# Shows the notice (at most once a day) and refreshes the saved version (at most once a week).
+# Only reads local files, so it adds no noticeable time to a command.
+_sf_update_tick() {
+  [[ -z $SF_SHORTCUTS_NO_UPDATE_CHECK ]] || return 0
+  local dir=${XDG_CACHE_HOME:-$HOME/.cache}/sf-shortcuts
+  local latest= checked= noticed= now
+  local version_re='^[0-9]+\.[0-9]+\.[0-9]+$' number_re='^[0-9]+$'
+  now=$(command date +%s)
+  [[ -r $dir/latest-version ]] && read -r latest checked < "$dir/latest-version"
+  [[ -r $dir/last-notice ]] && read -r noticed < "$dir/last-notice"
+  if [[ ! $latest =~ $version_re || ! $checked =~ $number_re ]]; then
+    latest= checked=0
+  fi
+  [[ $noticed =~ $number_re ]] || noticed=0
+
+  if [[ -n $latest ]] && _sf_version_newer "$latest" "$_SF_SHORTCUTS_VERSION" && (( now - noticed >= 86400 )); then
+    _sf_err "sf-shortcuts $latest is available (you have $_SF_SHORTCUTS_VERSION). Update: $(_sf_update_hint)"
+    { printf '%s\n' "$now" >| "$dir/last-notice"; } 2>/dev/null
+  fi
+  if (( now - checked >= 604800 )); then
+    _sf_update_refresh
+  fi
 }
 
 # Prints the metadata folder: $SF_SOURCE_DIR, else the default package directory
@@ -117,6 +189,10 @@ _sf_run() {
     fi
     shift
     set -- npx -y @salesforce/cli "$@"
+  fi
+  # Only in a terminal, so scripts and pipes are never affected
+  if [[ -t 2 ]]; then
+    _sf_update_tick
   fi
   local shown
   shown=$(printf '%q ' "$@")
@@ -497,6 +573,7 @@ Settings (env vars, all optional)
   SF_SOURCE_DIR   metadata folder        (default: from sfdx-project.json)
   SF_BASE_BRANCH  sfdbranch base branch  (default: origin HEAD, then main/master)
   SF_TEST_WAIT    test wait in minutes   (default: 10)
+  SF_SHORTCUTS_NO_UPDATE_CHECK=1         turn off the update notice
 EOF
 }
 

@@ -11,8 +11,14 @@ $module = Join-Path $PSScriptRoot '..' 'powershell' 'SfShortcuts.psd1'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "sf-shortcuts-$([guid]::NewGuid())"
 New-Item -ItemType Directory $tmp | Out-Null
 
-Remove-Item env:SF_SOURCE_DIR, env:SF_BASE_BRANCH, env:SF_TEST_WAIT -ErrorAction Ignore
+Remove-Item env:SF_SOURCE_DIR, env:SF_BASE_BRANCH, env:SF_TEST_WAIT, env:SF_SHORTCUTS_NO_UPDATE_CHECK -ErrorAction Ignore
+$origCache = $env:XDG_CACHE_HOME
+$env:XDG_CACHE_HOME = Join-Path $tmp 'cache'
 Import-Module $module -Force
+$sfModule = Get-Module SfShortcuts
+
+# The background refresh becomes a visible marker, so nothing here reaches the network
+& $sfModule { function script:Start-SfUpdateRefresh { 'refresh' } }
 
 # Fake sf: prints the arguments it received
 function global:sf { "sf $($args -join ' ')" }
@@ -153,6 +159,89 @@ try {
     { sfdcls A }
     Pop-Location
 
+    # --- update notice ---
+    $install = 'https://github.com/hggaguilera/sf-shortcuts#install'
+    $cache = Join-Path $env:XDG_CACHE_HOME 'sf-shortcuts'
+    $latestFile = Join-Path $cache 'latest-version'
+    $noticeFile = Join-Path $cache 'last-notice'
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $day = 86400
+    $week = 604800
+    $notOurs = New-Item -ItemType Directory (Join-Path $tmp 'notours')
+    & $sfModule { param($dir) $script:Version = '3.9.0'; $script:ModuleDir = $dir } $notOurs.FullName
+
+    # seed <latest-version> <seconds since checked> [<seconds since notice>]
+    function seed([string]$Latest, [long]$Checked, $Notice) {
+        Remove-Item -Recurse -Force $cache -ErrorAction Ignore
+        New-Item -ItemType Directory -Force $cache | Out-Null
+        Set-Content $latestFile "$Latest $($now - $Checked)"
+        if ($null -ne $Notice) { Set-Content $noticeFile "$($now - $Notice)" }
+    }
+    function tick { & $sfModule { Invoke-SfUpdateTick } 6>&1 }
+    function cachedVersion { ((Get-Content $latestFile) -split ' ')[0] }
+
+    seed 3.10.0 0
+    check 'notice when a newer version is known (numeric compare, 10 > 9)' `
+        "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $install" `
+    { tick }
+    check 'notice shows once a day' '' { tick }
+    seed 3.10.0 0 ($day - 60)
+    check 'no notice within a day of the last one' '' { tick }
+    seed 3.10.0 0 ($day + 60)
+    check 'notice returns after a day' `
+        "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $install" `
+    { tick }
+    seed 3.9.0 0
+    check 'no notice on the latest version' '' { tick }
+    seed 3.8.9 0
+    check 'no notice when ahead of the latest version' '' { tick }
+    seed 3.9.0 ($week - 60)
+    check 'no refresh within a week' '' { tick }
+    seed 3.9.0 ($week + 60)
+    check 'refresh after a week' 'refresh' { tick }
+    Remove-Item -Recurse -Force $cache
+    check 'refresh when nothing is cached' 'refresh' { tick }
+    seed 'not-a-version' 0
+    check 'corrupt cache is ignored and refreshed' 'refresh' { tick }
+    seed 3.10.0 ($week + 60)
+    check 'stale cache notifies and refreshes' `
+        "sf-shortcuts 3.10.0 is available (you have 3.9.0). Update: $install`nrefresh" `
+    { tick }
+    seed 3.10.0 ($week + 60)
+    check 'opt-out skips the notice and the refresh' '' `
+    { $env:SF_SHORTCUTS_NO_UPDATE_CHECK = '1'; try { tick } finally { Remove-Item env:SF_SHORTCUTS_NO_UPDATE_CHECK } }
+    if ([Console]::IsErrorRedirected) {
+        seed 3.10.0 ($week + 60)
+        check 'redirected commands skip the notice' 'sf org list' { sforgs 6>&1 | Where-Object { "$_" -notmatch '→' } }
+        check "redirected commands don't mark the notice as shown" 'False' { Test-Path $noticeFile }
+    }
+
+    # Install-specific instructions
+    $clone = Join-Path $tmp 'clone'
+    git init -q $clone
+    git -C $clone remote add origin https://github.com/hggaguilera/sf-shortcuts.git
+    $gallery = New-Item -ItemType Directory (Join-Path $tmp 'gallery')
+    Set-Content (Join-Path $gallery 'PSGetModuleInfo.xml') '<x/>'
+    function hint([string]$Dir) { & $sfModule { param($d) Get-SfUpdateHint $d } $Dir }
+    check 'git installs get a pull command' "git -C '$clone' pull" { hint $clone }
+    check 'other git repos get the install link' $install { hint $notOurs.FullName }
+    $galleryHint = (Get-Command Update-PSResource -ErrorAction Ignore) ? 'Update-PSResource SfShortcuts' : 'Update-Module SfShortcuts'
+    check 'gallery installs get the module update command' $galleryHint { hint $gallery.FullName }
+
+    # Fetching the latest version
+    & $sfModule { function script:Get-SfLatestLocation { $script:FakeLocation } }
+    function fetch([string]$Location) {
+        & $sfModule { param($l) $script:FakeLocation = $l; Invoke-SfUpdateFetch } $Location
+    }
+    Remove-Item -Recurse -Force $cache -ErrorAction Ignore
+    fetch 'https://github.com/hggaguilera/sf-shortcuts/releases/tag/v3.11.2'
+    check 'fetch saves the version from the redirect' '3.11.2' { cachedVersion }
+    seed 3.5.0 0
+    fetch 'https://github.com/login'
+    check 'a response without a version keeps the cache' '3.5.0' { cachedVersion }
+    fetch ''
+    check 'a failed request keeps the cache' '3.5.0' { cachedVersion }
+
     # --- no sf installed ---
     # Unqualified on purpose: "function:global:sf" finds the global scope but then looks for a
     # function literally named "global:sf", so it silently removes nothing
@@ -172,6 +261,7 @@ try {
     { $env:PATH = $empty; try { sforgs } finally { $env:PATH = $origPath } }
 } finally {
     $env:PATH = $origPath
+    $env:XDG_CACHE_HOME = $origCache
     Pop-Location
     Remove-Item -Recurse -Force $tmp -ErrorAction Ignore
 }

@@ -13,6 +13,12 @@
 #   $env:SF_SOURCE_DIR   metadata folder; default: read from sfdx-project.json
 #   $env:SF_BASE_BRANCH  branch sfdbranch compares against; default: origin's HEAD, then main/master
 #   $env:SF_TEST_WAIT    minutes to wait for test results; default: 10
+#   $env:SF_SHORTCUTS_NO_UPDATE_CHECK  set to 1 to turn off the update notice
+
+# The version comes from the manifest; set it with scripts/bump-version.sh before tagging a release
+$script:Version = (Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'SfShortcuts.psd1')).ModuleVersion
+$script:ModuleDir = $PSScriptRoot
+$script:RepoUrl = 'https://github.com/hggaguilera/sf-shortcuts'
 
 # Set by sfdcheck/sfdpreview while they run a deploy command: start, dry-run or preview
 $script:DeployMode = 'start'
@@ -21,6 +27,111 @@ $script:DeployCommands = @(
     'sfdobj', 'sfdfields', 'sfdcls', 'sfdtrg', 'sfdlwc', 'sfdaura', 'sfdvf', 'sfdflow',
     'sfdlayout', 'sfdperm', 'sfdmdt', 'sfdlabels', 'sfdmeta', 'sfdbranch'
 )
+
+# ---------- update notice ----------
+
+function Get-SfUpdateCacheDir {
+    $base = if ($env:XDG_CACHE_HOME) {
+        $env:XDG_CACHE_HOME
+    } elseif ($IsWindows) {
+        $env:LOCALAPPDATA
+    } else {
+        Join-Path $HOME '.cache'
+    }
+    Join-Path $base 'sf-shortcuts'
+}
+
+# Returns how to update this install
+function Get-SfUpdateHint([string]$Dir = $script:ModuleDir) {
+    # Install-PSResource and Install-Module both leave this file in the module folder
+    if (Test-Path -LiteralPath (Join-Path $Dir 'PSGetModuleInfo.xml')) {
+        if (Get-Command Update-PSResource -ErrorAction Ignore) {
+            return 'Update-PSResource SfShortcuts'
+        }
+        return 'Update-Module SfShortcuts'
+    }
+    if (Get-Command git -CommandType Application -ErrorAction Ignore) {
+        $origin = git -C $Dir remote get-url origin 2>$null
+        if ($LASTEXITCODE -eq 0 -and "$origin" -like '*sf-shortcuts*') {
+            return "git -C '$($Dir -replace "'", "''")' pull"
+        }
+    }
+    "$script:RepoUrl#install"
+}
+
+# Returns where the "latest release" page redirects to
+function Get-SfLatestLocation {
+    $response = Invoke-WebRequest -Uri "$script:RepoUrl/releases/latest" -Method Head -MaximumRedirection 0 `
+        -SkipHttpErrorCheck -TimeoutSec 5 -ErrorAction Stop
+    "$($response.Headers.Location)"
+}
+
+# Saves the latest released version. Keeps what's saved if the request fails or the
+# response has no version in it.
+function Invoke-SfUpdateFetch {
+    try {
+        $location = Get-SfLatestLocation
+    } catch {
+        return
+    }
+    if ($location -notmatch '/releases/tag/v(\d+\.\d+\.\d+)') {
+        return
+    }
+    $latest = $Matches[1]
+    $dir = Get-SfUpdateCacheDir
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    $partial = Join-Path $dir "latest-version.$PID"
+    Set-Content -LiteralPath $partial "$latest $([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+    Move-Item -LiteralPath $partial -Destination (Join-Path $dir 'latest-version') -Force
+}
+
+# Fetches in a separate hidden process, so the command never waits on the network
+function Start-SfUpdateRefresh {
+    $manifest = (Join-Path $script:ModuleDir 'SfShortcuts.psd1') -replace "'", "''"
+    $exe = Join-Path $PSHOME ($IsWindows ? 'pwsh.exe' : 'pwsh')
+    $info = [System.Diagnostics.ProcessStartInfo]::new($exe)
+    foreach ($a in '-NoProfile', '-NonInteractive', '-Command',
+        "Import-Module -LiteralPath '$manifest'; & (Get-Module SfShortcuts) { Invoke-SfUpdateFetch }") {
+        $info.ArgumentList.Add($a)
+    }
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $null = [System.Diagnostics.Process]::Start($info)
+}
+
+# Shows the notice (at most once a day) and refreshes the saved version (at most once a week).
+# Only reads local files, so it adds no noticeable time to a command.
+function Invoke-SfUpdateTick {
+    if ($env:SF_SHORTCUTS_NO_UPDATE_CHECK) {
+        return
+    }
+    $dir = Get-SfUpdateCacheDir
+    $noticeFile = Join-Path $dir 'last-notice'
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+
+    $latest = $null
+    $checked = 0L
+    if ((Get-Content -LiteralPath (Join-Path $dir 'latest-version') -TotalCount 1 -ErrorAction Ignore) -match '^(\d+\.\d+\.\d+) (\d+)$') {
+        $latest = $Matches[1]
+        $checked = [long]$Matches[2]
+    }
+    $noticed = 0L
+    $line = Get-Content -LiteralPath $noticeFile -TotalCount 1 -ErrorAction Ignore
+    if ($line -match '^\d+$') {
+        $noticed = [long]$line
+    }
+
+    if ($latest -and [version]$latest -gt [version]$script:Version -and ($now - $noticed) -ge 86400) {
+        Write-Host "sf-shortcuts $latest is available (you have $script:Version). Update: $(Get-SfUpdateHint)"
+        Set-Content -LiteralPath $noticeFile "$now" -ErrorAction Ignore
+    }
+    if (($now - $checked) -ge 604800) {
+        Start-SfUpdateRefresh
+    }
+}
 
 # ---------- internals ----------
 
@@ -116,6 +227,15 @@ function Invoke-SfCommand([string[]]$Command) {
         }
         $exe = 'npx'
         $rest = @('-y', '@salesforce/cli') + $rest
+    }
+
+    # Only in a terminal, so scripts are never affected, and a failure here never stops the command
+    if (-not [Console]::IsErrorRedirected) {
+        try {
+            $null = Invoke-SfUpdateTick
+        } catch {
+            Write-Debug "Update check failed: $_"
+        }
     }
 
     $shown = (@($exe) + $rest | ForEach-Object {
@@ -465,6 +585,7 @@ Settings (env vars, all optional)
   $env:SF_SOURCE_DIR   metadata folder        (default: from sfdx-project.json)
   $env:SF_BASE_BRANCH  sfdbranch base branch  (default: origin HEAD, then main/master)
   $env:SF_TEST_WAIT    test wait in minutes   (default: 10)
+  $env:SF_SHORTCUTS_NO_UPDATE_CHECK = 1       turn off the update notice
 '@
 }
 
