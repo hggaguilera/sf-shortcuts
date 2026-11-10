@@ -16,7 +16,7 @@
 : ${SF_TEST_WAIT:=10}
 
 # Set with scripts/bump-version.sh before tagging a release
-_SF_SHORTCUTS_VERSION=3.0.1
+_SF_SHORTCUTS_VERSION=3.1.0
 _SF_SHORTCUTS_DIR=${${(%):-%x}:A:h}
 _SF_SHORTCUTS_REPO=https://github.com/hggaguilera/sf-shortcuts
 

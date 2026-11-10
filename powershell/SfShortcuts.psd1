@@ -1,6 +1,6 @@
 @{
     RootModule           = 'SfShortcuts.psm1'
-    ModuleVersion        = '3.0.1'
+    ModuleVersion        = '3.1.0'
     GUID                 = 'ac4cc4ab-28e6-4a50-afaa-5446aaa1f25a'
     Author               = 'Hector Gonzalez'
     Description          = 'Short, predictable commands for the Salesforce CLI (sf), with tab completion for your classes, components and orgs.'
