@@ -43,7 +43,7 @@ zsh -c 'source ./sf-shortcuts.plugin.zsh; sf() { print -r -- "sf $*" }; cd /path
 
 ## Releases
 
-Run `bash scripts/bump-version.sh X.Y.Z` and commit before tagging: it sets `_SF_SHORTCUTS_VERSION` in zsh and bash and `ModuleVersion` in the `.psd1`. These must live in the repo because git installs get the repo files directly.
+Run `bash scripts/bump-version.sh X.Y.Z --tag` (or without `--tag`, then commit and tag yourself): it refuses a dirty tree or an existing tag, then sets `_SF_SHORTCUTS_VERSION` in zsh and bash and `ModuleVersion` in the `.psd1`. These must live in the repo because git installs get the repo files directly.
 
 Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it calls `ci.yml` (via `workflow_call`), runs `scripts/package.sh <tag>` to build `dist/sf-shortcuts-{zsh,bash,powershell}.zip` + `SHA256SUMS` (asset names are unversioned so `releases/latest/download/…` links keep working), creates the GitHub release, then publishes `dist/SfShortcuts` to the PowerShell Gallery if the `PSGALLERY_API_KEY` secret exists. `package.sh` fails if any port doesn't declare the tag's version. A new file a shell needs at runtime must be added to that shell's `pack` line in `package.sh`.
 

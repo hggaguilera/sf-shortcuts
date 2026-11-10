@@ -277,8 +277,8 @@ The three versions provide the same commands and should stay in sync. The tests 
 
 ### Releasing
 
-1. Set the version in all three ports and commit it: `bash scripts/bump-version.sh 1.2.0`.
-2. Push a version tag: `git tag v1.2.0 && git push origin v1.2.0`.
+1. Set the version in all three ports, commit it and create the tag: `bash scripts/bump-version.sh 1.2.0 --tag`. (Without `--tag` it only edits the files, and you commit and tag yourself.)
+2. Push the commit and the tag: `git push origin HEAD v1.2.0`.
 3. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the zips with `scripts/package.sh` (which fails if the ports don't declare the tag's version), creates the GitHub release with the zips and a `SHA256SUMS` file, and publishes the module to the PowerShell Gallery.
 
 Publishing to the gallery needs a `PSGALLERY_API_KEY` repository secret, holding an API key from your [PowerShell Gallery account](https://www.powershellgallery.com/account/apikeys) with push rights for `SfShortcuts`. Without the secret, the GitHub release is still created and the gallery step is skipped. To build the zips locally: `bash scripts/package.sh 1.2.0`, using the version the ports currently declare (output goes to `dist/`).
