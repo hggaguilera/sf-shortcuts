@@ -59,11 +59,12 @@ function Get-SfUpdateHint([string]$Dir = $script:ModuleDir) {
     "$script:RepoUrl#install"
 }
 
-# Returns where the "latest release" page redirects to
+# Returns the address the "latest release" page redirects to (.../releases/tag/vX.Y.Z).
+# Follows the redirect and reads where it ended up: turning redirects off and reading the
+# Location header doesn't work everywhere, as some setups follow the redirect anyway.
 function Get-SfLatestLocation {
-    $response = Invoke-WebRequest -Uri "$script:RepoUrl/releases/latest" -Method Head -MaximumRedirection 0 `
-        -SkipHttpErrorCheck -TimeoutSec 5 -ErrorAction Stop
-    "$($response.Headers.Location)"
+    $response = Invoke-WebRequest -Uri "$script:RepoUrl/releases/latest" -Method Head -TimeoutSec 10 -ErrorAction Stop
+    "$($response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri)"
 }
 
 # Saves the latest released version. Keeps what's saved if the request fails or the
