@@ -43,7 +43,7 @@ sfdcls AccountService -t AccountServiceTest
 
 - zsh, bash 3.2+ or PowerShell 7+
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`), or [Node.js](https://nodejs.org) — if `sf` isn't installed, the shortcuts run it through `npx -y @salesforce/cli` (slower, and the first run downloads the CLI)
-- git (for `sfdbranch`)
+- git (for `sfdbranch` and `sfdmanifest`)
 - [jq](https://jqlang.github.io/jq/) (optional for zsh and bash, used to read `sfdx-project.json` more reliably; PowerShell doesn't need it)
 
 ## Install
@@ -185,10 +185,13 @@ Run `sfhelp` in your terminal for this list.
 | `sfdlabels` | All custom labels | `sfdlabels` |
 | `sfdmeta` | Any `Type:Name` | `sfdmeta ApexClass:Foo Flow:Bar` |
 | `sfdbranch` | Everything changed on your branch | `sfdbranch` or `sfdbranch develop` |
+| `sfdmanifest` | Same as `sfdbranch`, deployed through a generated `package.xml` | `sfdmanifest` or `sfdmanifest develop` |
 | `sfdcheck` | Dry run of any deploy command | `sfdcheck sfdcls MyClass -t MyClassTest` |
 | `sfdpreview` | Shows what a deploy command would send | `sfdpreview sfdbranch` |
 
 `sfdbranch` includes committed, uncommitted and new files under your source folder. It does **not** remove deleted files from the org; use a destructive deploy for that.
+
+When the branch has many changed files, `sfdbranch` can build a command that is too long for Windows. `sfdmanifest` deploys the same files from a `package.xml` it generates in `.sf/sf-shortcuts-manifest` and deletes after the deploy. It deploys whole components, so changing one file of an LWC deploys the whole bundle.
 
 ### Retrieve
 

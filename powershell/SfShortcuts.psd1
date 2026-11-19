@@ -8,7 +8,7 @@
     CompatiblePSEditions = @('Core')
     FunctionsToExport    = @(
         'sfdobj', 'sfdfields', 'sfdcls', 'sfdtrg', 'sfdlwc', 'sfdaura', 'sfdvf', 'sfdflow', 'sfdlayout',
-        'sfdperm', 'sfdmdt', 'sfdlabels', 'sfdmeta', 'sfdbranch', 'sfdcheck', 'sfdpreview',
+        'sfdperm', 'sfdmdt', 'sfdlabels', 'sfdmeta', 'sfdbranch', 'sfdmanifest', 'sfdcheck', 'sfdpreview',
         'sfrobj', 'sfrcls', 'sfrlwc', 'sfrmeta',
         'sftest', 'sftestm', 'sftestall', 'sfapex', 'sfq',
         'sflogs', 'sfopen', 'sfwho', 'sforgs', 'sfdefault', 'sfhelp'

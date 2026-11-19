@@ -298,20 +298,15 @@ sfdmeta() {
   _sf_deploy "${flags[@]}"
 }
 
-# Deploy everything changed on this branch (committed, uncommitted and untracked)
-# since it split from the base branch. Deleted files are NOT removed from the org.
-# Usage: sfdbranch [base-branch] [-o org] [-t Test1 ...]
-sfdbranch() {
-  local -a items org tests extra
-  _sf_parse "$@" || return 1
-  _sf_require_project || return 1
-
+# Fills the caller's `files` with what changed under the source folder (committed,
+# uncommitted and untracked) since the branch split from the base (items[1], else
+# _sf_base_branch), and lists them. Leaves `files` empty when nothing changed.
+_sf_branch_files() {
   local root=$(_sf_source_dir)
   local base=${items[1]:-$(_sf_base_branch)}
   local mb
   mb=$(git merge-base "$base" HEAD) || return 1
 
-  local -a files
   files=(${(fu)"$(
     git diff --name-only --diff-filter=ACMRT "$mb"
     git ls-files --others --exclude-standard
@@ -325,6 +320,17 @@ sfdbranch() {
 
   print "Changed since $base (${#files} files):"
   print -l -- "  "${^files}
+}
+
+# Deploy everything changed on this branch (committed, uncommitted and untracked)
+# since it split from the base branch. Deleted files are NOT removed from the org.
+# Usage: sfdbranch [base-branch] [-o org] [-t Test1 ...]
+sfdbranch() {
+  local -a items org tests extra files
+  _sf_parse "$@" || return 1
+  _sf_require_project || return 1
+  _sf_branch_files || return 1
+  (( ${#files} )) || return 0
 
   local -a flags
   local f
@@ -332,6 +338,28 @@ sfdbranch() {
     flags+=(--source-dir "$f")
   done
   _sf_deploy "${flags[@]}"
+}
+
+# Same files as sfdbranch, deployed through a generated package.xml instead of one
+# --source-dir per file, so the deploy command stays short (Windows limits its length).
+# Usage: sfdmanifest [base-branch] [-o org] [-t Test1 ...]
+sfdmanifest() {
+  local -a items org tests extra files
+  _sf_parse "$@" || return 1
+  _sf_require_project || return 1
+  _sf_branch_files || return 1
+  (( ${#files} )) || return 0
+
+  local dir=.sf/sf-shortcuts-manifest rc
+  # One --source-dir followed by every path: sf takes them all, and it is shorter
+  if _sf_run sf project generate manifest --output-dir "$dir" --source-dir "${files[@]}"; then
+    _sf_deploy --manifest "$dir/package.xml"
+    rc=$?
+  else
+    rc=1
+  fi
+  rm -rf -- "$dir"
+  return $rc
 }
 
 # Dry-run any sfd command - Usage: sfdcheck sfdcls MyClass -t MyClassTest
@@ -527,6 +555,7 @@ Deploy (one or more names; add -t Test1 [Test2 ...] to run specific tests)
   sfdlabels                                All custom labels
   sfdmeta    ApexClass:Foo [...]           Any Type:Name
   sfdbranch  [base]                        Everything changed vs base (default: origin HEAD)
+  sfdmanifest [base]                       Same as sfdbranch, via a package.xml (many files)
   sfdcheck   <sfd-command> ...             Dry-run any of the above
   sfdpreview <sfd-command> ...             Preview what any of the above would deploy
 
@@ -599,7 +628,7 @@ _sf_shortcuts_complete() {
   if [[ $cmd == (sfdcheck|sfdpreview) ]]; then
     if (( CURRENT == 2 )); then
       compadd sfdobj sfdfields sfdcls sfdtrg sfdlwc sfdaura sfdvf sfdflow \
-        sfdlayout sfdperm sfdmdt sfdlabels sfdmeta sfdbranch
+        sfdlayout sfdperm sfdmdt sfdlabels sfdmeta sfdbranch sfdmanifest
       return
     fi
     shift words
@@ -643,7 +672,7 @@ _sf_shortcuts_complete() {
 if (( $+functions[compdef] )); then
   compdef _sf_shortcuts_complete \
     sfdobj sfdfields sfdcls sfdtrg sfdlwc sfdaura sfdvf sfdflow sfdlayout sfdperm sfdmdt \
-    sfdlabels sfdmeta sfdbranch sfdcheck sfdpreview \
+    sfdlabels sfdmeta sfdbranch sfdmanifest sfdcheck sfdpreview \
     sfrobj sfrcls sfrlwc sfrmeta \
     sftest sftestm sftestall sfapex sfq sflogs sfopen sfwho sfdefault
 fi

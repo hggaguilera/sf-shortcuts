@@ -104,6 +104,12 @@ try {
     check 'branch deploy (detects main, skips files outside the source folder)' `
         "Changed since main (2 files):`n  $S/classes/A.cls`n  $S/classes/B.cls`nsf project deploy start --source-dir $S/classes/A.cls --source-dir $S/classes/B.cls" `
     { sfdbranch }
+    check 'manifest deploy (same files as sfdbranch, via package.xml)' `
+        "Changed since main (2 files):`n  $S/classes/A.cls`n  $S/classes/B.cls`nsf project generate manifest --output-dir .sf/sf-shortcuts-manifest --source-dir $S/classes/A.cls $S/classes/B.cls`nsf project deploy start --manifest .sf/sf-shortcuts-manifest/package.xml --target-org uat --test-level RunSpecifiedTests --tests ATest" `
+    { sfdmanifest -o uat -t ATest }
+    check 'manifest preview' `
+        "Changed since main (2 files):`n  $S/classes/A.cls`n  $S/classes/B.cls`nsf project generate manifest --output-dir .sf/sf-shortcuts-manifest --source-dir $S/classes/A.cls $S/classes/B.cls`nsf project deploy preview --manifest .sf/sf-shortcuts-manifest/package.xml" `
+    { sfdpreview sfdmanifest }
     check 'retrieve classes' `
         'sf project retrieve start --metadata ApexClass:Foo --metadata ApexClass:Bar --target-org uat' `
     { sfrcls Foo Bar -o uat }
