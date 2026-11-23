@@ -185,13 +185,16 @@ Run `sfhelp` in your terminal for this list.
 | `sfdlabels` | All custom labels | `sfdlabels` |
 | `sfdmeta` | Any `Type:Name` | `sfdmeta ApexClass:Foo Flow:Bar` |
 | `sfdbranch` | Everything changed on your branch | `sfdbranch` or `sfdbranch develop` |
-| `sfdmanifest` | Same as `sfdbranch`, deployed through a generated `package.xml` | `sfdmanifest` or `sfdmanifest develop` |
+| `sfdmanifest` | Your whole source folder, deployed through a generated `package.xml` | `sfdmanifest` |
 | `sfdcheck` | Dry run of any deploy command | `sfdcheck sfdcls MyClass -t MyClassTest` |
 | `sfdpreview` | Shows what a deploy command would send | `sfdpreview sfdbranch` |
 
 `sfdbranch` includes committed, uncommitted and new files under your source folder. It does **not** remove deleted files from the org; use a destructive deploy for that.
 
-When the branch has many changed files, `sfdbranch` can build a command that is too long for Windows. `sfdmanifest` deploys the same files from a `package.xml` it generates in `.sf/sf-shortcuts-manifest` and deletes after the deploy. It deploys whole components, so changing one file of an LWC deploys the whole bundle.
+> [!WARNING]
+> `sfdbranch` adds a `--source-dir` flag for every changed file, and Windows limits how long a command can be. If more than 20 files changed on your branch, use `sfdmanifest` instead so the deploy doesn't fail with "the command line is too long".
+
+`sfdmanifest` generates a `package.xml` from your whole source folder (in `.sf/sf-shortcuts-manifest`, deleted after the deploy) and deploys it, so the command stays short however many files there are. It deploys **everything** in the source folder, not just what changed on your branch.
 
 ### Retrieve
 

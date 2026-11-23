@@ -354,63 +354,53 @@ function sfdmeta {
     Invoke-SfDeploy $p $flags
 }
 
-# Lists what changed under the source folder (committed, uncommitted and untracked)
-# since the branch split from the base (first item, else Get-SfBaseBranch) and stores
-# it in $Files. Returns $false when git fails or nothing changed.
-function Get-SfBranchFiles([hashtable]$Parsed, [ref]$Files) {
-    $root = Get-SfSourceDir
-    $base = if ($Parsed.Items.Count) { $Parsed.Items[0] } else { Get-SfBaseBranch }
-    $mb = git merge-base $base HEAD
-    if ($LASTEXITCODE -ne 0) { return $false }
-
-    # git always prints paths with forward slashes
-    $prefix = ($root -replace '\\', '/').TrimEnd('/') + '/'
-    $Files.Value = @(
-        @(git diff --name-only --diff-filter=ACMRT $mb) + @(git ls-files --others --exclude-standard) |
-            Where-Object { $_ -and $_.StartsWith($prefix, [StringComparison]::Ordinal) } |
-            Select-Object -Unique
-    )
-
-    if (-not $Files.Value.Count) {
-        "No changes under $root since $base"
-        return $false
-    }
-
-    "Changed since $base ($($Files.Value.Count) files):"
-    $Files.Value | ForEach-Object { "  $_" }
-    $true
-}
-
 # Deploy everything changed on this branch (committed, uncommitted and untracked)
 # since it split from the base branch. Deleted files are NOT removed from the org.
 # Usage: sfdbranch [base-branch] [-o org] [-t Test1 ...]
 function sfdbranch {
     $p = Split-SfArgs $args
     if (-not $p -or -not (Test-SfProject)) { return }
-    $files = @()
-    $out = @(Get-SfBranchFiles $p ([ref]$files))
-    $out | Select-Object -SkipLast 1
-    if (-not $out[-1]) { return }
+
+    $root = Get-SfSourceDir
+    $base = if ($p.Items.Count) { $p.Items[0] } else { Get-SfBaseBranch }
+    $mb = git merge-base $base HEAD
+    if ($LASTEXITCODE -ne 0) { return }
+
+    # git always prints paths with forward slashes
+    $prefix = ($root -replace '\\', '/').TrimEnd('/') + '/'
+    $files = @(
+        @(git diff --name-only --diff-filter=ACMRT $mb) + @(git ls-files --others --exclude-standard) |
+            Where-Object { $_ -and $_.StartsWith($prefix, [StringComparison]::Ordinal) } |
+            Select-Object -Unique
+    )
+
+    if (-not $files.Count) {
+        "No changes under $root since $base"
+        return
+    }
+
+    "Changed since $base ($($files.Count) files):"
+    $files | ForEach-Object { "  $_" }
 
     $flags = foreach ($f in $files) { '--source-dir', $f }
     Invoke-SfDeploy $p $flags
 }
 
-# Same files as sfdbranch, deployed through a generated package.xml instead of one
-# --source-dir per file, so the deploy command stays short (Windows limits its length).
-# Usage: sfdmanifest [base-branch] [-o org] [-t Test1 ...]
+# Deploy the whole source folder through a package.xml generated from it. The command
+# stays short however many files the project has, unlike sfdbranch, whose
+# one --source-dir per file can exceed the Windows command-line limit.
+# Usage: sfdmanifest [-o org] [-t Test1 ...]
 function sfdmanifest {
     $p = Split-SfArgs $args
     if (-not $p -or -not (Test-SfProject)) { return }
-    $files = @()
-    $out = @(Get-SfBranchFiles $p ([ref]$files))
-    $out | Select-Object -SkipLast 1
-    if (-not $out[-1]) { return }
+    if ($p.Items.Count) {
+        Write-SfError 'Usage: sfdmanifest [-o org] [-t Test1 ...] [-- sf flags]'
+        return
+    }
 
     $dir = '.sf/sf-shortcuts-manifest'
     try {
-        # One --source-dir followed by every path: sf takes them all, and it is shorter
-        Invoke-SfCommand (@('sf', 'project', 'generate', 'manifest', '--output-dir', $dir, '--source-dir') + $files)
+        Invoke-SfCommand @('sf', 'project', 'generate', 'manifest', '--source-dir', (Get-SfSourceDir), '--output-dir', $dir)
         if ($LASTEXITCODE) { return }
         Invoke-SfDeploy $p @('--manifest', "$dir/package.xml")
     } finally {
@@ -586,7 +576,7 @@ Deploy (one or more names; add -t Test1 [Test2 ...] to run specific tests)
   sfdlabels                                All custom labels
   sfdmeta    ApexClass:Foo [...]           Any Type:Name
   sfdbranch  [base]                        Everything changed vs base (default: origin HEAD)
-  sfdmanifest [base]                       Same as sfdbranch, via a package.xml (many files)
+  sfdmanifest                              Whole source folder via a package.xml (many files)
   sfdcheck   <sfd-command> ...             Dry-run any of the above
   sfdpreview <sfd-command> ...             Preview what any of the above would deploy
 
@@ -614,6 +604,9 @@ Org / debug
 
 sf flags: everything from the first --flag on is passed to sf (sfdlwc myComp --ignore-conflicts).
 PowerShell drops a bare --, so quote it to pass short flags: sftestall '--' -w 30
+
+if the changes on the branch are too many (20+ files) to pass as --source-dir, use sfdmanifest instead 
+of sfdbranch.
 
 Settings (env vars, all optional)
   $env:SF_SOURCE_DIR   metadata folder        (default: from sfdx-project.json)

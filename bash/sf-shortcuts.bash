@@ -311,16 +311,21 @@ sfdmeta() {
   _sf_deploy "${flags[@]}"
 }
 
-# Fills the caller's `files` with what changed under the source folder (committed,
-# uncommitted and untracked) since the branch split from the base (items[0], else
-# _sf_base_branch), and lists them. Leaves `files` empty when nothing changed.
-_sf_branch_files() {
-  local root base mb f
+# Deploy everything changed on this branch (committed, uncommitted and untracked)
+# since it split from the base branch. Deleted files are NOT removed from the org.
+# Usage: sfdbranch [base-branch] [-o org] [-t Test1 ...]
+sfdbranch() {
+  local -a items org tests extra
+  _sf_parse "$@" || return 1
+  _sf_require_project || return 1
+
+  local root base mb
   root=$(_sf_source_dir)
   base=${items[0]:-$(_sf_base_branch)}
   mb=$(git merge-base "$base" HEAD) || return 1
 
-  files=()
+  local -a files=()
+  local f
   while IFS= read -r f; do
     [[ $f == "$root"/* ]] && files+=("$f")
   done < <(
@@ -337,39 +342,29 @@ _sf_branch_files() {
 
   printf '%s\n' "Changed since $base (${#files[@]} files):"
   printf '  %s\n' "${files[@]}"
-}
-
-# Deploy everything changed on this branch (committed, uncommitted and untracked)
-# since it split from the base branch. Deleted files are NOT removed from the org.
-# Usage: sfdbranch [base-branch] [-o org] [-t Test1 ...]
-sfdbranch() {
-  local -a items org tests extra files
-  _sf_parse "$@" || return 1
-  _sf_require_project || return 1
-  _sf_branch_files || return 1
-  (( ${#files[@]} )) || return 0
 
   local -a flags=()
-  local f
   for f in "${files[@]}"; do
     flags+=(--source-dir "$f")
   done
   _sf_deploy "${flags[@]}"
 }
 
-# Same files as sfdbranch, deployed through a generated package.xml instead of one
-# --source-dir per file, so the deploy command stays short (Windows limits its length).
-# Usage: sfdmanifest [base-branch] [-o org] [-t Test1 ...]
+# Deploy the whole source folder through a package.xml generated from it. The command
+# stays short however many files the project has, unlike sfdbranch, whose
+# one --source-dir per file can exceed the Windows command-line limit.
+# Usage: sfdmanifest [-o org] [-t Test1 ...]
 sfdmanifest() {
-  local -a items org tests extra files
+  local -a items org tests extra
   _sf_parse "$@" || return 1
   _sf_require_project || return 1
-  _sf_branch_files || return 1
-  (( ${#files[@]} )) || return 0
+  if (( ${#items[@]} )); then
+    _sf_err "Usage: sfdmanifest [-o org] [-t Test1 ...] [-- sf flags]"
+    return 1
+  fi
 
   local dir=.sf/sf-shortcuts-manifest rc
-  # One --source-dir followed by every path: sf takes them all, and it is shorter
-  if _sf_run sf project generate manifest --output-dir "$dir" --source-dir "${files[@]}"; then
+  if _sf_run sf project generate manifest --source-dir "$(_sf_source_dir)" --output-dir "$dir"; then
     _sf_deploy --manifest "$dir/package.xml"
     rc=$?
   else
@@ -573,7 +568,7 @@ Deploy (one or more names; add -t Test1 [Test2 ...] to run specific tests)
   sfdlabels                                All custom labels
   sfdmeta    ApexClass:Foo [...]           Any Type:Name
   sfdbranch  [base]                        Everything changed vs base (default: origin HEAD)
-  sfdmanifest [base]                       Same as sfdbranch, via a package.xml (many files)
+  sfdmanifest                              Whole source folder via a package.xml (many files)
   sfdcheck   <sfd-command> ...             Dry-run any of the above
   sfdpreview <sfd-command> ...             Preview what any of the above would deploy
 
